@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplitSmart - Group Expense & Bill Splitter</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f3ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        [v-cloak] { display: none !important; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="h-full font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+    <div id="app" v-cloak class="min-h-screen flex flex-col bg-slate-50 pb-12">
+        
+        <!-- Header / Navigation Bar -->
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center h-16 gap-2">
+                    <!-- Logo & Group Title -->
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white shadow-md shadow-indigo-200 shrink-0">
+                            <i class="fa-solid font-bold fa-receipt text-lg"></i>
+                        </div>
+                        <div class="truncate">
+                            <div class="flex items-center space-x-2">
+                                <h1 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-none truncate">{{ groupName }}</h1>
+                                <button @click="openEditGroupModal" class="text-slate-400 hover:text-indigo-600 text-xs transition shrink-0" title="Rename Group">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5 truncate">Smart Group Bill & Expense Splitter</p>
+                        </div>
+                    </div>
+
+                    <!-- Right Controls: Currency Selector & Quick Actions -->
+                    <div class="flex items-center space-x-2 sm:space-x-3 shrink-0">
+                        
+                        <!-- Currency Selection Control -->
+                        <div class="relative flex items-center bg-slate-100 hover:bg-slate-200/80 rounded-xl px-2.5 py-1.5 border border-slate-200 transition">
+                            <i class="fa-solid fa-globe text-indigo-600 text-xs mr-1.5"></i>
+                            <select v-model="selectedCurrencyCode" @change="onCurrencyChange" class="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1">
+                                <option v-for="curr in currencies" :key="curr.code" :value="curr.code">
+                                    {{ curr.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <!-- Add Bill Button -->
+                        <button @click="openAddExpenseModal()" class="inline-flex items-center space-x-1.5 px-3 py-2 sm:px-3.5 rounded-xl bg-indigo-600 text-white font-medium text-xs sm:text-sm hover:bg-indigo-700 active:bg-indigo-800 transition shadow-sm">
+                            <i class="fa-solid fa-plus text-xs"></i>
+                            <span class="hidden sm:inline">Add Bill</span>
+                            <span class="sm:hidden">Bill</span>
+                        </button>
+                        
+                        <!-- Data Management Menu Dropdown -->
+                        <div class="relative">
+                            <button @click="showDataMenu = !showDataMenu" class="p-2 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition">
+                                <i class="fa-solid fa-ellipsis-vertical text-lg"></i>
+                            </button>
+                            <div v-if="showDataMenu" @click.outside="showDataMenu = false" class="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 animate-in fade-in duration-150">
+                                <button @click="openExportModal(); showDataMenu = false;" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 flex items-center space-x-2">
+                                    <i class="fa-solid fa-file-export text-slate-400 w-4"></i>
+                                    <span>Export / Backup</span>
+                                </button>
+                                <button @click="openImportModal(); showDataMenu = false;" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-slate-700 hover:bg-slate-50 flex items-center space-x-2">
+                                    <i class="fa-solid fa-file-import text-slate-400 w-4"></i>
+                                    <span>Import Data</span>
+                                </button>
+                                <div class="border-t border-slate-100 my-1"></div>
+                                <button @click="confirmResetData(); showDataMenu = false;" class="w-full text-left px-4 py-2 text-xs sm:text-sm text-rose-600 hover:bg-rose-50 flex items-center space-x-2">
+                                    <i class="fa-solid fa-rotate-left text-rose-400 w-4"></i>
+                                    <span>Reset to Sample Data</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation Bar -->
+        <nav class="bg-white border-b border-slate-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex space-x-6 sm:space-x-8 overflow-x-auto no-scrollbar">
+                    <button 
+                        v-for="tab in tabs" 
+                        :key="tab.id"
+                        @click="currentTab = tab.id"
+                        :class="[
+                            currentTab === tab.id 
+                                ? 'border-indigo-600 text-indigo-600 font-semibold' 
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 font-medium',
+                            'py-3.5 px-1 inline-flex items-center border-b-2 text-xs sm:text-sm whitespace-nowrap space-x-2 transition-colors'
+                        ]">
+                        <i :class="[tab.icon, currentTab === tab.id ? 'text-indigo-600' : 'text-slate-400']"></i>
+                        <span>{{ tab.label }}</span>
+                        <span v-if="tab.badge !== undefined" class="ml-1 px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-600">
+                            {{ tab.badge }}
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content View Container -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+            <!-- 1. DASHBOARD TAB -->
+            <div v-if="currentTab === 'dashboard'" class="space-y-6">
+                
+                <!-- Stat Cards with Selected Currency Formatting -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fa-solid fa-wallet"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Group Spent</p>
+                            <p class="text-2xl font-bold text-slate-900 mt-0.5">{{ currencySymbol }}{{ formatMoney(totalGroupSpent) }}</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fa-solid fa-calculator"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Avg Spent / Person</p>
+                            <p class="text-2xl font-bold text-slate-900 mt-0.5">{{ currencySymbol }}{{ formatMoney(avgSpentPerPerson) }}</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fa-solid fa-receipt"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Bills</p>
+                            <p class="text-2xl font-bold text-slate-900 mt-0.5">{{ expenses.length }}</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-4">
+                        <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl shrink-0">
+                            <i class="fa-solid fa-handshake-angle"></i>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Pending Settlements</p>
+                            <p class="text-2xl font-bold text-slate-900 mt-0.5">{{ optimizedSettlements.length }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts & Overview Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Category Spending Breakdown Chart -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm lg:col-span-2">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                                <i class="fa-solid fa-chart-pie text-indigo-500"></i>
+                                <span>Category Spending Breakdown ({{ selectedCurrencyCode }})</span>
+                            </h2>
+                        </div>
+                        <div class="h-64 relative flex items-center justify-center">
+                            <canvas id="categoryChart" v-show="expenses.length > 0"></canvas>
+                            <div v-if="expenses.length === 0" class="text-slate-400 text-center py-12">
+                                <i class="fa-solid fa-chart-simple text-4xl mb-2 text-slate-300"></i>
+                                <p class="text-sm">No expenses recorded yet</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Net Balances Summary Card -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                                <i class="fa-solid fa-scale-balanced text-indigo-500"></i>
+                                <span>Net Balances</span>
+                            </h2>
+                            <button @click="currentTab = 'members'" class="text-xs text-indigo-600 hover:underline">View All</button>
+                        </div>
+
+                        <div class="space-y-3 flex-grow overflow-y-auto max-h-64 custom-scrollbar pr-1">
+                            <div v-for="member in memberBalances" :key="member.id" class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100/80 transition">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-sm" :style="{ backgroundColor: member.color }">
+                                        {{ getInitials(member.name) }}
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-semibold text-slate-900">{{ member.name }}</p>
+                                        <p class="text-[11px] text-slate-500">Paid {{ currencySymbol }}{{ formatMoney(member.totalPaid) }}</p>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p :class="['text-xs font-bold', member.netBalance >= 0.01 ? 'text-emerald-600' : member.netBalance <= -0.01 ? 'text-rose-600' : 'text-slate-500']">
+                                        {{ member.netBalance >= 0.01 ? '+' : '' }}{{ currencySymbol }}{{ formatMoney(member.netBalance) }}
+                                    </p>
+                                    <p class="text-[10px] text-slate-400">
+                                        {{ member.netBalance >= 0.01 ? 'gets back' : member.netBalance <= -0.01 ? 'owes total' : 'settled' }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Expenses & Quick Settlement Plan Banner -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- Recent Expenses List -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                                <i class="fa-solid fa-clock-rotate-left text-indigo-500"></i>
+                                <span>Recent Expenses</span>
+                            </h2>
+                            <button @click="currentTab = 'expenses'" class="text-xs text-indigo-600 hover:underline">View All ({{ expenses.length }})</button>
+                        </div>
+                        <div class="space-y-3">
+                            <div v-for="exp in recentExpenses" :key="exp.id" class="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-9 h-9 rounded-lg flex items-center justify-center text-slate-700 bg-slate-100">
+                                        <i :class="getCategoryIcon(exp.category)"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-semibold text-slate-900">{{ exp.title }}</p>
+                                        <p class="text-[11px] text-slate-500">
+                                            Paid by <span class="font-medium text-slate-700">{{ getMemberName(exp.paidBy) }}</span> • {{ formatDate(exp.date) }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <p class="text-sm font-bold text-slate-900">{{ currencySymbol }}{{ formatMoney(exp.amount) }}</p>
+                            </div>
+                            <div v-if="expenses.length === 0" class="text-center py-6 text-slate-400 text-xs">
+                                No expenses added yet. Click "+ Add Bill" to start!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Optimized Settlement Quick Plan -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                                    <i class="fa-solid fa-wand-magic-sparkles text-indigo-500"></i>
+                                    <span>Smart Settlement Plan</span>
+                                </h2>
+                                <button @click="currentTab = 'settlements'" class="text-xs text-indigo-600 hover:underline">Full Details</button>
+                            </div>
+                            
+                            <p class="text-xs text-slate-500 mb-3">Minimized transactions calculated using debt simplification algorithm:</p>
+                            
+                            <div class="space-y-2.5 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                <div v-for="(settle, index) in optimizedSettlements" :key="index" class="p-3 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                                    <div class="flex items-center space-x-2 text-xs">
+                                        <span class="font-bold text-slate-800">{{ getMemberName(settle.from) }}</span>
+                                        <i class="fa-solid fa-arrow-right text-slate-400 text-[10px]"></i>
+                                        <span class="font-bold text-slate-800">{{ getMemberName(settle.to) }}</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="text-xs font-bold text-indigo-600">{{ currencySymbol }}{{ formatMoney(settle.amount) }}</span>
+                                        <button @click="recordSettlementPayment(settle.from, settle.to, settle.amount)" class="px-2 py-1 text-[11px] bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-md font-medium transition">
+                                            Settle
+                                        </button>
+                                    </div>
+                                </div>
+                                <div v-if="optimizedSettlements.length === 0" class="text-center py-6 text-emerald-600 text-xs font-medium flex flex-col items-center">
+                                    <i class="fa-solid fa-circle-check text-2xl mb-1 text-emerald-500"></i>
+                                    <span>All debts are settled! Everyone is even.</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+                            <button @click="copySettlementSummary" class="text-xs font-medium text-slate-700 hover:text-indigo-600 flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition">
+                                <i class="fa-solid fa-copy"></i>
+                                <span>Copy Summary for Messaging</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 2. EXPENSES TAB -->
+            <div v-if="currentTab === 'expenses'" class="space-y-4">
+                
+                <!-- Filter & Search Toolbar -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row gap-3 justify-between items-center">
+                    <div class="relative w-full sm:w-72">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+                        <input v-model="expenseSearch" type="text" placeholder="Search expenses..." class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+
+                    <div class="flex items-center space-x-2 w-full sm:w-auto overflow-x-auto">
+                        <!-- Category Filter -->
+                        <select v-model="filterCategory" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Categories</option>
+                            <option v-for="cat in categories" :key="cat.name" :value="cat.name">{{ cat.name }}</option>
+                        </select>
+
+                        <!-- Payer Filter -->
+                        <select v-model="filterPayer" class="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Payers</option>
+                            <option v-for="member in members" :key="member.id" :value="member.id">{{ member.name }}</option>
+                        </select>
+
+                        <button @click="openAddExpenseModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl transition shrink-0">
+                            <i class="fa-solid fa-plus mr-1"></i> New Bill
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expenses List Cards -->
+                <div class="space-y-3">
+                    <div v-for="exp in filteredExpenses" :key="exp.id" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition overflow-hidden">
+                        <div class="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div class="flex items-start space-x-3">
+                                <div class="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0 text-base">
+                                    <i :class="getCategoryIcon(exp.category)"></i>
+                                </div>
+                                <div>
+                                    <div class="flex items-center space-x-2">
+                                        <h3 class="text-sm font-bold text-slate-900">{{ exp.title }}</h3>
+                                        <span class="px-2 py-0.5 text-[10px] rounded-full font-medium bg-slate-100 text-slate-600">
+                                            {{ exp.category }}
+                                        </span>
+                                        <span class="px-2 py-0.5 text-[10px] rounded-full font-medium bg-indigo-50 text-indigo-700 uppercase">
+                                            {{ exp.splitMethod }}
+                                        </span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-1">
+                                        Paid by <span class="font-semibold text-slate-700">{{ getMemberName(exp.paidBy) }}</span> on {{ formatDate(exp.date) }}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between sm:justify-end space-x-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                                <div class="text-left sm:text-right">
+                                    <p class="text-base font-extrabold text-slate-900">{{ currencySymbol }}{{ formatMoney(exp.amount) }}</p>
+                                    <p class="text-[11px] text-slate-400">{{ Object.keys(exp.splits).length }} people involved</p>
+                                </div>
+                                <div class="flex items-center space-x-1">
+                                    <button @click="openEditExpenseModal(exp)" class="p-2 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-50 transition" title="Edit Expense">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    <button @click="confirmDeleteExpense(exp.id)" class="p-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-50 transition" title="Delete Expense">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                    <button @click="exp.expanded = !exp.expanded" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-50 transition">
+                                        <i :class="['fa-solid', exp.expanded ? 'fa-chevron-up' : 'fa-chevron-down']"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Expanded Split Detail Section -->
+                        <div v-if="exp.expanded" class="bg-slate-50/80 px-4 py-3 border-t border-slate-100 text-xs text-slate-600 space-y-2">
+                            <p class="font-semibold text-slate-700">Split Breakdown:</p>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div v-for="(amount, memberId) in exp.splits" :key="memberId" class="p-2 bg-white rounded-lg border border-slate-200/60 flex items-center justify-between">
+                                    <span class="font-medium text-slate-700">{{ getMemberName(memberId) }}</span>
+                                    <span class="font-bold text-slate-900">{{ currencySymbol }}{{ formatMoney(amount) }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="filteredExpenses.length === 0" class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-400">
+                        <i class="fa-solid fa-receipt text-3xl mb-2 text-slate-300"></i>
+                        <p class="text-sm font-medium">No matching expenses found</p>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 3. GROUP MEMBERS TAB -->
+            <div v-if="currentTab === 'members'" class="space-y-6">
+                
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900">Group Members ({{ members.length }})</h2>
+                        <p class="text-xs text-slate-500">Manage participants and see individual spending metrics</p>
+                    </div>
+                    <button @click="openAddMemberModal" class="px-3.5 py-2 rounded-xl bg-indigo-600 text-white font-medium text-xs hover:bg-indigo-700 transition flex items-center space-x-1">
+                        <i class="fa-solid fa-user-plus text-xs"></i>
+                        <span>Add Member</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div v-for="member in memberBalances" :key="member.id" class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm shadow" :style="{ backgroundColor: member.color }">
+                                        {{ getInitials(member.name) }}
+                                    </div>
+                                    <div>
+                                        <h3 class="text-sm font-bold text-slate-900">{{ member.name }}</h3>
+                                        <p class="text-xs text-slate-400">{{ member.email || 'No email specified' }}</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center space-x-1">
+                                    <button @click="openEditMemberModal(member)" class="p-1.5 text-slate-400 hover:text-indigo-600 transition">
+                                        <i class="fa-solid fa-pen text-xs"></i>
+                                    </button>
+                                    <button @click="confirmDeleteMember(member.id)" class="p-1.5 text-slate-400 hover:text-rose-600 transition" :disabled="members.length <= 2" :title="members.length <= 2 ? 'Minimum 2 members required' : 'Delete Member'">
+                                        <i class="fa-solid fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="space-y-2 py-3 border-y border-slate-100 text-xs">
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Total Paid Out:</span>
+                                    <span class="font-bold text-slate-800">{{ currencySymbol }}{{ formatMoney(member.totalPaid) }}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-slate-500">Total Share (Consumed):</span>
+                                    <span class="font-bold text-slate-800">{{ currencySymbol }}{{ formatMoney(member.totalShare) }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-2 flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-500">Net Balance:</span>
+                            <span :class="['text-sm font-extrabold', member.netBalance >= 0.01 ? 'text-emerald-600' : member.netBalance <= -0.01 ? 'text-rose-600' : 'text-slate-500']">
+                                {{ member.netBalance >= 0.01 ? '+' : '' }}{{ currencySymbol }}{{ formatMoney(member.netBalance) }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 4. SETTLEMENTS TAB -->
+            <div v-if="currentTab === 'settlements'" class="space-y-6">
+                
+                <div class="bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-2xl p-6 shadow-md">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 class="text-xl font-extrabold tracking-tight">Optimized Debt Simplification</h2>
+                            <p class="text-indigo-100 text-xs mt-1 max-w-xl">
+                                Our algorithm reduces total transfers to the minimum possible number of payments needed to completely settle all group debts in {{ selectedCurrencyCode }}.
+                            </p>
+                        </div>
+                        <button @click="copySettlementSummary" class="bg-white text-indigo-700 hover:bg-indigo-50 font-semibold px-4 py-2 rounded-xl text-xs shadow transition flex items-center space-x-2 shrink-0">
+                            <i class="fa-solid fa-share-nodes"></i>
+                            <span>Copy WhatsApp / Text Summary</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step-by-Step Settlements List -->
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm">
+                    <h3 class="text-base font-bold text-slate-900 mb-4 flex items-center space-x-2">
+                        <i class="fa-solid fa-list-check text-indigo-500"></i>
+                        <span>Settlement Steps ({{ optimizedSettlements.length }})</span>
+                    </h3>
+
+                    <div v-if="optimizedSettlements.length > 0" class="space-y-3">
+                        <div v-for="(settle, idx) in optimizedSettlements" :key="idx" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs shrink-0">
+                                    #{{ idx + 1 }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                                        <span class="text-rose-600">{{ getMemberName(settle.from) }}</span>
+                                        <span class="text-xs text-slate-400 font-normal">pays</span>
+                                        <span class="text-emerald-600">{{ getMemberName(settle.to) }}</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mt-0.5">Direct transfer payment</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between sm:justify-end space-x-4">
+                                <span class="text-lg font-extrabold text-indigo-600">{{ currencySymbol }}{{ formatMoney(settle.amount) }}</span>
+                                <button @click="recordSettlementPayment(settle.from, settle.to, settle.amount)" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm transition flex items-center space-x-1.5">
+                                    <i class="fa-solid fa-check text-xs"></i>
+                                    <span>Mark Settled</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-else class="text-center py-12">
+                        <div class="w-16 h-16 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto text-3xl mb-3">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <h4 class="text-base font-bold text-slate-800">Everyone is Fully Settled!</h4>
+                        <p class="text-xs text-slate-500 mt-1">There are no outstanding balances or pending debts in this group.</p>
+                    </div>
+                </div>
+
+            </div>
+
+        </main>
+
+        <!-- ================= MODALS & DIALOGS ================= -->
+
+        <!-- ADD / EDIT EXPENSE MODAL -->
+        <div v-if="showExpenseModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+                <!-- Modal Header -->
+                <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 class="text-base font-bold text-slate-900 flex items-center space-x-2">
+                        <i class="fa-solid fa-receipt text-indigo-600"></i>
+                        <span>{{ editingExpenseId ? 'Edit Bill / Expense' : 'Add New Bill / Expense' }}</span>
+                    </h3>
+                    <button @click="showExpenseModal = false" class="text-slate-400 hover:text-slate-600 p-1">
+                        <i class="fa-solid fa-xmark text-base"></i>
+                    </button>
+                </div>
+
+                <!-- Modal Form Body -->
+                <div class="p-5 overflow-y-auto space-y-4 text-xs custom-scrollbar">
+                    
+                    <!-- Title & Amount -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Expense Title *</label>
+                            <input v-model="expenseForm.title" type="text" placeholder="e.g. Dinner, Grocery, Taxi" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Total Amount ({{ currencySymbol }}) *</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-2.5 font-bold text-slate-400">{{ currencySymbol }}</span>
+                                <input v-model.number="expenseForm.amount" @input="recalculateSplits" type="number" :step="currentCurrencyDecimals === 0 ? '1' : '0.01'" min="0" placeholder="0" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Category, Date, Paid By -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Category</label>
+                            <select v-model="expenseForm.category" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                <option v-for="cat in categories" :key="cat.name" :value="cat.name">{{ cat.name }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Date</label>
+                            <input v-model="expenseForm.date" type="date" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Paid By *</label>
+                            <select v-model="expenseForm.paidBy" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 font-semibold focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                <option v-for="m in members" :key="m.id" :value="m.id">{{ m.name }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Split Method Switcher -->
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Split Method</label>
+                        <div class="grid grid-cols-3 gap-2 bg-slate-100 p-1 rounded-xl">
+                            <button 
+                                type="button"
+                                @click="setSplitMethod('equal')"
+                                :class="['py-1.5 rounded-lg font-medium text-xs transition', expenseForm.splitMethod === 'equal' ? 'bg-white shadow text-indigo-600' : 'text-slate-600 hover:text-slate-900']">
+                                Equal (=)
+                            </button>
+                            <button 
+                                type="button"
+                                @click="setSplitMethod('exact')"
+                                :class="['py-1.5 rounded-lg font-medium text-xs transition', expenseForm.splitMethod === 'exact' ? 'bg-white shadow text-indigo-600' : 'text-slate-600 hover:text-slate-900']">
+                                Exact ({{ currencySymbol }})
+                            </button>
+                            <button 
+                                type="button"
+                                @click="setSplitMethod('percentage')"
+                                :class="['py-1.5 rounded-lg font-medium text-xs transition', expenseForm.splitMethod === 'percentage' ? 'bg-white shadow text-indigo-600' : 'text-slate-600 hover:text-slate-900']">
+                                Percentage (%)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Split Input Table -->
+                    <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/50 space-y-2">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="font-bold text-slate-700">Individual Split Breakdown</span>
+                            <!-- Validation Status Badge -->
+                            <span :class="['px-2 py-0.5 rounded text-[10px] font-bold', splitValidation.isValid ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700']">
+                                {{ splitValidation.message }}
+                            </span>
+                        </div>
+
+                        <!-- Equal Split Selection -->
+                        <div v-if="expenseForm.splitMethod === 'equal'" class="space-y-1.5">
+                            <div v-for="m in members" :key="m.id" class="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200">
+                                <label class="flex items-center space-x-2 cursor-pointer">
+                                    <input type="checkbox" :value="m.id" v-model="expenseForm.selectedMembers" @change="recalculateSplits" class="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4">
+                                    <span class="font-medium text-slate-800">{{ m.name }}</span>
+                                </label>
+                                <span class="font-bold text-slate-900">
+                                    {{ currencySymbol }}{{ formatMoney(expenseForm.splitValues[m.id] || 0) }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <!-- Exact Amount Split Selection -->
+                        <div v-if="expenseForm.splitMethod === 'exact'" class="space-y-1.5">
+                            <div v-for="m in members" :key="m.id" class="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200">
+                                <span class="font-medium text-slate-800">{{ m.name }}</span>
+                                <div class="flex items-center space-x-1">
+                                    <span class="text-slate-400 font-bold">{{ currencySymbol }}</span>
+                                    <input v-model.number="expenseForm.exactValues[m.id]" @input="recalculateSplits" type="number" :step="currentCurrencyDecimals === 0 ? '1' : '0.01'" min="0" placeholder="0" class="w-24 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Percentage Split Selection -->
+                        <div v-if="expenseForm.splitMethod === 'percentage'" class="space-y-1.5">
+                            <div v-for="m in members" :key="m.id" class="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200">
+                                <span class="font-medium text-slate-800">{{ m.name }}</span>
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-xs text-slate-500 font-bold">{{ currencySymbol }}{{ formatMoney(expenseForm.splitValues[m.id] || 0) }}</span>
+                                    <div class="flex items-center space-x-1">
+                                        <input v-model.number="expenseForm.percentageValues[m.id]" @input="recalculateSplits" type="number" step="1" min="0" max="100" placeholder="0" class="w-16 px-2 py-1 bg-slate-50 border border-slate-200 rounded text-right font-bold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                        <span class="text-slate-400 font-bold">%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-2">
+                    <button @click="showExpenseModal = false" class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition">Cancel</button>
+                    <button @click="saveExpense" :disabled="!splitValidation.isValid || !expenseForm.title || !expenseForm.amount" class="px-5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">
+                        Save Expense
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ADD / EDIT MEMBER MODAL -->
+        <div v-if="showMemberModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4 text-xs">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-slate-900">{{ editingMemberId ? 'Edit Member' : 'Add Group Member' }}</h3>
+                    <button @click="showMemberModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-base"></i></button>
+                </div>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Member Name *</label>
+                        <input v-model="memberForm.name" type="text" placeholder="e.g. Sarah" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Email (Optional)</label>
+                        <input v-model="memberForm.email" type="email" placeholder="sarah@example.com" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Avatar Color Tag</label>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <button v-for="color in avatarColors" :key="color" @click="memberForm.color = color" type="button" class="w-7 h-7 rounded-full transition transform hover:scale-110 flex items-center justify-center text-white" :style="{ backgroundColor: color }">
+                                <i v-if="memberForm.color === color" class="fa-solid fa-check text-[10px]"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button @click="showMemberModal = false" class="px-3.5 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100 transition">Cancel</button>
+                    <button @click="saveMember" :disabled="!memberForm.name.trim()" class="px-4 py-2 rounded-xl font-semibold bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 transition">
+                        Save Member
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- EDIT GROUP NAME MODAL -->
+        <div v-if="showEditGroupModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4 text-xs">
+                <h3 class="text-base font-bold text-slate-900">Rename Group</h3>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Group Title</label>
+                    <input v-model="tempGroupName" type="text" class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button @click="showEditGroupModal = false" class="px-3.5 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button @click="saveGroupName" class="px-4 py-2 rounded-xl font-semibold bg-indigo-600 text-white hover:bg-indigo-700">Save</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- EXPORT / BACKUP MODAL -->
+        <div v-if="showExportModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-5 space-y-4 text-xs">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-slate-900">Export & Backup Group Data</h3>
+                    <button @click="showExportModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-base"></i></button>
+                </div>
+                <p class="text-slate-500">Copy the JSON string below or download as a file to save your group state.</p>
+                <textarea readonly rows="6" class="w-full p-3 font-mono text-[11px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none">{{ exportJsonString }}</textarea>
+                <div class="flex justify-end space-x-2">
+                    <button @click="copyExportData" class="px-4 py-2 rounded-xl font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700">
+                        <i class="fa-solid fa-copy mr-1"></i> Copy JSON
+                    </button>
+                    <button @click="downloadExportFile" class="px-4 py-2 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white">
+                        <i class="fa-solid fa-download mr-1"></i> Download File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- IMPORT DATA MODAL -->
+        <div v-if="showImportModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-5 space-y-4 text-xs">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-base font-bold text-slate-900">Import Group Data</h3>
+                    <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-base"></i></button>
+                </div>
+                <p class="text-slate-500">Paste a valid JSON group backup below to restore your group:</p>
+                <textarea v-model="importJsonInput" rows="6" placeholder="Paste JSON here..." class="w-full p-3 font-mono text-[11px] bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+                <div class="flex justify-end space-x-2">
+                    <button @click="showImportModal = false" class="px-3.5 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button @click="executeImport" class="px-4 py-2 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-700 text-white">Import Data</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONFIRMATION DIALOG MODAL -->
+        <div v-if="confirmDialog.show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-5 space-y-4 text-xs">
+                <div class="flex items-center space-x-3 text-rose-600">
+                    <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    <h3 class="text-base font-bold text-slate-900">{{ confirmDialog.title }}</h3>
+                </div>
+                <p class="text-slate-600">{{ confirmDialog.message }}</p>
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button @click="confirmDialog.show = false" class="px-3.5 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                    <button @click="confirmDialog.onConfirm(); confirmDialog.show = false;" class="px-4 py-2 rounded-xl font-semibold bg-rose-600 hover:bg-rose-700 text-white">
+                        Confirm Action
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOAST NOTIFICATION STACK -->
+        <div class="fixed bottom-4 right-4 z-50 space-y-2 pointer-events-none max-w-sm w-full">
+            <div v-for="toast in toasts" :key="toast.id" :class="['p-3 rounded-xl shadow-lg border text-xs font-medium flex items-center justify-between pointer-events-auto transition-all transform duration-300', toast.type === 'success' ? 'bg-emerald-800 text-white border-emerald-700' : 'bg-slate-900 text-white border-slate-800']">
+                <div class="flex items-center space-x-2">
+                    <i :class="[toast.type === 'success' ? 'fa-solid fa-circle-check text-emerald-300' : 'fa-solid fa-circle-info text-indigo-300']"></i>
+                    <span>{{ toast.message }}</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // Supported Currency Configurations
+                const currencies = [
+                    { code: 'USD', symbol: '$', decimals: 2, label: 'USD ($)' },
+                    { code: 'EUR', symbol: '€', decimals: 2, label: 'EUR (€)' },
+                    { code: 'GBP', symbol: '£', decimals: 2, label: 'GBP (£)' },
+                    { code: 'JPY', symbol: '¥', decimals: 0, label: 'JPY (¥)' },
+                    { code: 'CAD', symbol: 'CA$', decimals: 2, label: 'CAD ($)' },
+                    { code: 'AUD', symbol: 'A$', decimals: 2, label: 'AUD ($)' },
+                    { code: 'INR', symbol: '₹', decimals: 2, label: 'INR (₹)' },
+                    { code: 'CHF', symbol: 'CHF ', decimals: 2, label: 'CHF (Fr.)' },
+                    { code: 'BRL', symbol: 'R$', decimals: 2, label: 'BRL (R$)' },
+                    { code: 'SGD', symbol: 'S$', decimals: 2, label: 'SGD ($)' },
+                    { code: 'CNY', symbol: 'CN¥', decimals: 2, label: 'CNY (¥)' },
+                    { code: 'MXN', symbol: 'Mex$', decimals: 2, label: 'MXN ($)' },
+                ];
+
+                const selectedCurrencyCode = ref('USD');
+
+                const currentCurrency = computed(() => {
+                    return currencies.find(c => c.code === selectedCurrencyCode.value) || currencies[0];
+                });
+
+                const currencySymbol = computed(() => currentCurrency.value.symbol);
+                const currentCurrencyDecimals = computed(() => currentCurrency.value.decimals);
+
+                // Helper Currency Formatter
+                const formatMoney = (val) => {
+                    const num = Number(val) || 0;
+                    const dec = currentCurrencyDecimals.value;
+                    return num.toLocaleString('en-US', {
+                        minimumFractionDigits: dec,
+                        maximumFractionDigits: dec
+                    });
+                };
+
+                // Pre-loaded sample group data
+                const initialMembers = [
+                    { id: 'm1', name: 'Alice', email: 'alice@example.com', color: '#10B981' },
+                    { id: 'm2', name: 'Bob', email: 'bob@example.com', color: '#6366F1' },
+                    { id: 'm3', name: 'Charlie', email: 'charlie@example.com', color: '#F59E0B' },
+                    { id: 'm4', name: 'Diana', email: 'diana@example.com', color: '#F43F5E' },
+                ];
+
+                const initialExpenses = [
+                    {
+                        id: 'e1',
+                        title: 'Airbnb Cabin Rental',
+                        amount: 800.00,
+                        category: 'Housing/Rent',
+                        date: '2026-09-18',
+                        paidBy: 'm1',
+                        splitMethod: 'equal',
+                        splits: { m1: 200, m2: 200, m3: 200, m4: 200 },
+                        expanded: false
+                    },
+                    {
+                        id: 'e2',
+                        title: 'Grocery Shopping',
+                        amount: 160.00,
+                        category: 'Food & Drink',
+                        date: '2026-09-19',
+                        paidBy: 'm2',
+                        splitMethod: 'equal',
+                        splits: { m1: 40, m2: 40, m3: 40, m4: 40 },
+                        expanded: false
+                    },
+                    {
+                        id: 'e3',
+                        title: 'Gasoline & Tolls',
+                        amount: 60.00,
+                        category: 'Travel & Transport',
+                        date: '2026-09-19',
+                        paidBy: 'm3',
+                        splitMethod: 'equal',
+                        splits: { m1: 20, m2: 20, m3: 20 },
+                        expanded: false
+                    },
+                    {
+                        id: 'e4',
+                        title: 'Gourmet Dinner at Lakeview',
+                        amount: 240.00,
+                        category: 'Food & Drink',
+                        date: '2026-09-20',
+                        paidBy: 'm4',
+                        splitMethod: 'exact',
+                        splits: { m1: 70, m2: 50, m3: 60, m4: 60 },
+                        expanded: false
+                    },
+                    {
+                        id: 'e5',
+                        title: 'Concert Tickets',
+                        amount: 200.00,
+                        category: 'Entertainment',
+                        date: '2026-09-21',
+                        paidBy: 'm1',
+                        splitMethod: 'percentage',
+                        splits: { m1: 50, m2: 50, m3: 50, m4: 50 },
+                        expanded: false
+                    }
+                ];
+
+                const categories = [
+                    { name: 'Food & Drink', icon: 'fa-solid fa-utensils' },
+                    { name: 'Housing/Rent', icon: 'fa-solid fa-house-chimney' },
+                    { name: 'Travel & Transport', icon: 'fa-solid fa-car' },
+                    { name: 'Utilities', icon: 'fa-solid fa-bolt' },
+                    { name: 'Entertainment', icon: 'fa-solid fa-ticket' },
+                    { name: 'Shopping', icon: 'fa-solid fa-bag-shopping' },
+                    { name: 'Other', icon: 'fa-solid fa-coins' }
+                ];
+
+                const avatarColors = ['#10B981', '#6366F1', '#F59E0B', '#F43F5E', '#8B5CF6', '#EC4899', '#06B6D4'];
+
+                // State
+                const groupName = ref('Weekend Lake Tahoe Trip');
+                const members = ref([]);
+                const expenses = ref([]);
+                const currentTab = ref('dashboard');
+                const showDataMenu = ref(false);
+
+                // Modals visibility
+                const showExpenseModal = ref(false);
+                const editingExpenseId = ref(null);
+                const showMemberModal = ref(false);
+                const editingMemberId = ref(null);
+                const showEditGroupModal = ref(false);
+                const tempGroupName = ref('');
+                const showExportModal = ref(false);
+                const showImportModal = ref(false);
+                const importJsonInput = ref('');
+
+                // Custom Confirm Dialog State
+                const confirmDialog = ref({
+                    show: false,
+                    title: '',
+                    message: '',
+                    onConfirm: () => {}
+                });
+
+                // Toast Notification State
+                const toasts = ref([]);
+
+                const addToast = (message, type = 'info') => {
+                    const id = Date.now();
+                    toasts.value.push({ id, message, type });
+                    setTimeout(() => {
+                        toasts.value = toasts.value.filter(t => t.id !== id);
+                    }, 3000);
+                };
+
+                // Expense Filters & Search
+                const expenseSearch = ref('');
+                const filterCategory = ref('');
+                const filterPayer = ref('');
+
+                // Navigation Tabs
+                const tabs = computed(() => [
+                    { id: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-chart-line' },
+                    { id: 'expenses', label: 'Expenses', icon: 'fa-solid fa-receipt', badge: expenses.value.length },
+                    { id: 'members', label: 'Members', icon: 'fa-solid fa-users', badge: members.value.length },
+                    { id: 'settlements', label: 'Settlements', icon: 'fa-solid fa-handshake-angle', badge: optimizedSettlements.value.length },
+                ]);
+
+                // Forms State
+                const memberForm = ref({ name: '', email: '', color: avatarColors[0] });
+
+                const expenseForm = ref({
+                    title: '',
+                    amount: 0,
+                    category: 'Food & Drink',
+                    date: new Date().toISOString().substring(0, 10),
+                    paidBy: '',
+                    splitMethod: 'equal',
+                    selectedMembers: [],
+                    exactValues: {},
+                    percentageValues: {},
+                    splitValues: {}
+                });
+
+                // Load & Save LocalStorage
+                const loadStoredData = () => {
+                    const saved = localStorage.getItem('splitsmart_data');
+                    if (saved) {
+                        try {
+                            const parsed = JSON.parse(saved);
+                            groupName.value = parsed.groupName || 'Weekend Lake Tahoe Trip';
+                            members.value = parsed.members || initialMembers;
+                            expenses.value = parsed.expenses || initialExpenses;
+                            if (parsed.currency) {
+                                selectedCurrencyCode.value = parsed.currency;
+                            }
+                            return;
+                        } catch (e) {
+                            console.error('Failed to parse local storage:', e);
+                        }
+                    }
+                    // Defaults
+                    groupName.value = 'Weekend Lake Tahoe Trip';
+                    members.value = initialMembers;
+                    expenses.value = initialExpenses;
+                    selectedCurrencyCode.value = 'USD';
+                };
+
+                const saveData = () => {
+                    const data = {
+                        groupName: groupName.value,
+                        members: members.value,
+                        expenses: expenses.value,
+                        currency: selectedCurrencyCode.value
+                    };
+                    localStorage.setItem('splitsmart_data', JSON.stringify(data));
+                };
+
+                watch([groupName, members, expenses, selectedCurrencyCode], saveData, { deep: true });
+
+                const onCurrencyChange = () => {
+                    addToast(`Currency switched to ${selectedCurrencyCode.value} (${currencySymbol.value})`, 'info');
+                    renderChart();
+                };
+
+                // Calculations & Metrics
+                const totalGroupSpent = computed(() => {
+                    return expenses.value.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                });
+
+                const avgSpentPerPerson = computed(() => {
+                    if (members.value.length === 0) return 0;
+                    return totalGroupSpent.value / members.value.length;
+                });
+
+                // Calculate Paid, Share, Net Balance for each member
+                const memberBalances = computed(() => {
+                    return members.value.map(member => {
+                        let totalPaid = 0;
+                        let totalShare = 0;
+
+                        expenses.value.forEach(exp => {
+                            if (exp.paidBy === member.id) {
+                                totalPaid += Number(exp.amount) || 0;
+                            }
+                            if (exp.splits && exp.splits[member.id] !== undefined) {
+                                totalShare += Number(exp.splits[member.id]) || 0;
+                            }
+                        });
+
+                        const netBalance = totalPaid - totalShare;
+
+                        return {
+                            ...member,
+                            totalPaid,
+                            totalShare,
+                            netBalance
+                        };
+                    });
+                });
+
+                // Optimal Greedy Settlement Algorithm
+                const optimizedSettlements = computed(() => {
+                    const balances = memberBalances.value.map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        balance: Math.round(m.netBalance * 100) / 100
+                    }));
+
+                    const debtors = balances.filter(b => b.balance < -0.01).sort((a, b) => a.balance - b.balance);
+                    const creditors = balances.filter(b => b.balance > 0.01).sort((a, b) => b.balance - a.balance);
+
+                    const transactions = [];
+
+                    let i = 0; // debtor index
+                    let j = 0; // creditor index
+
+                    while (i < debtors.length && j < creditors.length) {
+                        const debtor = debtors[i];
+                        const creditor = creditors[j];
+
+                        const amount = Math.min(Math.abs(debtor.balance), creditor.balance);
+                        const roundedAmount = currentCurrencyDecimals.value === 0 
+                            ? Math.round(amount) 
+                            : Math.round(amount * 100) / 100;
+
+                        if (roundedAmount > 0) {
+                            transactions.push({
+                                from: debtor.id,
+                                to: creditor.id,
+                                amount: roundedAmount
+                            });
+                        }
+
+                        debtor.balance += amount;
+                        creditor.balance -= amount;
+
+                        if (Math.abs(debtor.balance) < 0.01) i++;
+                        if (creditor.balance < 0.01) j++;
+                    }
+
+                    return transactions;
+                });
+
+                // Filtered Expenses
+                const filteredExpenses = computed(() => {
+                    return expenses.value.filter(exp => {
+                        const matchesSearch = exp.title.toLowerCase().includes(expenseSearch.value.toLowerCase());
+                        const matchesCategory = filterCategory.value ? exp.category === filterCategory.value : true;
+                        const matchesPayer = filterPayer.value ? exp.paidBy === filterPayer.value : true;
+                        return matchesSearch && matchesCategory && matchesPayer;
+                    });
+                });
+
+                const recentExpenses = computed(() => {
+                    return [...expenses.value].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
+                });
+
+                // Split Form Real-time Validation
+                const splitValidation = computed(() => {
+                    const totalAmount = Number(expenseForm.value.amount) || 0;
+                    if (totalAmount <= 0) {
+                        return { isValid: false, message: 'Amount must be > 0' };
+                    }
+
+                    if (expenseForm.value.splitMethod === 'equal') {
+                        const count = expenseForm.value.selectedMembers.length;
+                        if (count === 0) return { isValid: false, message: 'Select at least 1 person' };
+                        return { isValid: true, message: `Split equally among ${count} people` };
+                    }
+
+                    if (expenseForm.value.splitMethod === 'exact') {
+                        let sum = 0;
+                        Object.values(expenseForm.value.exactValues).forEach(v => sum += (Number(v) || 0));
+                        const diff = Math.abs(totalAmount - sum);
+                        if (diff < 0.01) {
+                            return { isValid: true, message: `Exact amounts match total (${currencySymbol.value}${formatMoney(totalAmount)})` };
+                        } else {
+                            const remain = totalAmount - sum;
+                            return { isValid: false, message: `Unallocated: ${currencySymbol.value}${formatMoney(remain)}` };
+                        }
+                    }
+
+                    if (expenseForm.value.splitMethod === 'percentage') {
+                        let sumPct = 0;
+                        Object.values(expenseForm.value.percentageValues).forEach(v => sumPct += (Number(v) || 0));
+                        if (Math.abs(sumPct - 100) < 0.1) {
+                            return { isValid: true, message: 'Percentages total 100%' };
+                        } else {
+                            return { isValid: false, message: `Total %: ${sumPct.toFixed(0)}% (must equal 100%)` };
+                        }
+                    }
+
+                    return { isValid: false, message: 'Invalid split' };
+                });
+
+                const setSplitMethod = (method) => {
+                    expenseForm.value.splitMethod = method;
+                    recalculateSplits();
+                };
+
+                const recalculateSplits = () => {
+                    const total = Number(expenseForm.value.amount) || 0;
+                    const result = {};
+                    const dec = currentCurrencyDecimals.value;
+
+                    if (expenseForm.value.splitMethod === 'equal') {
+                        const selected = expenseForm.value.selectedMembers;
+                        if (selected.length > 0) {
+                            const perPerson = dec === 0 
+                                ? Math.round(total / selected.length) 
+                                : Math.round((total / selected.length) * 100) / 100;
+                            selected.forEach(mId => result[mId] = perPerson);
+                        }
+                    } else if (expenseForm.value.splitMethod === 'exact') {
+                        members.value.forEach(m => {
+                            result[m.id] = Number(expenseForm.value.exactValues[m.id]) || 0;
+                        });
+                    } else if (expenseForm.value.splitMethod === 'percentage') {
+                        members.value.forEach(m => {
+                            const pct = Number(expenseForm.value.percentageValues[m.id]) || 0;
+                            const amt = dec === 0 
+                                ? Math.round(total * (pct / 100)) 
+                                : Math.round((total * (pct / 100)) * 100) / 100;
+                            result[m.id] = amt;
+                        });
+                    }
+
+                    expenseForm.value.splitValues = result;
+                };
+
+                // Expense Actions
+                const openAddExpenseModal = () => {
+                    editingExpenseId.value = null;
+                    const defaultPayer = members.value[0] ? members.value[0].id : '';
+                    const defaultSelected = members.value.map(m => m.id);
+
+                    const exact = {};
+                    const percentage = {};
+                    const equalPct = members.value.length ? Math.floor(100 / members.value.length) : 0;
+                    
+                    members.value.forEach(m => {
+                        exact[m.id] = 0;
+                        percentage[m.id] = equalPct;
+                    });
+
+                    expenseForm.value = {
+                        title: '',
+                        amount: 0,
+                        category: 'Food & Drink',
+                        date: new Date().toISOString().substring(0, 10),
+                        paidBy: defaultPayer,
+                        splitMethod: 'equal',
+                        selectedMembers: defaultSelected,
+                        exactValues: exact,
+                        percentageValues: percentage,
+                        splitValues: {}
+                    };
+                    recalculateSplits();
+                    showExpenseModal.value = true;
+                };
+
+                const openEditExpenseModal = (exp) => {
+                    editingExpenseId.value = exp.id;
+                    const selected = Object.keys(exp.splits || {});
+                    
+                    const exact = {};
+                    const percentage = {};
+                    const total = exp.amount || 1;
+
+                    members.value.forEach(m => {
+                        const amt = exp.splits[m.id] || 0;
+                        exact[m.id] = amt;
+                        percentage[m.id] = Math.round((amt / total) * 100);
+                    });
+
+                    expenseForm.value = {
+                        title: exp.title,
+                        amount: exp.amount,
+                        category: exp.category,
+                        date: exp.date,
+                        paidBy: exp.paidBy,
+                        splitMethod: exp.splitMethod || 'equal',
+                        selectedMembers: selected,
+                        exactValues: exact,
+                        percentageValues: percentage,
+                        splitValues: { ...exp.splits }
+                    };
+                    recalculateSplits();
+                    showExpenseModal.value = true;
+                };
+
+                const saveExpense = () => {
+                    if (!splitValidation.value.isValid || !expenseForm.value.title) return;
+
+                    recalculateSplits();
+
+                    const newExp = {
+                        id: editingExpenseId.value || 'e_' + Date.now(),
+                        title: expenseForm.value.title,
+                        amount: Number(expenseForm.value.amount),
+                        category: expenseForm.value.category,
+                        date: expenseForm.value.date,
+                        paidBy: expenseForm.value.paidBy,
+                        splitMethod: expenseForm.value.splitMethod,
+                        splits: expenseForm.value.splitValues,
+                        expanded: false
+                    };
+
+                    if (editingExpenseId.value) {
+                        const idx = expenses.value.findIndex(e => e.id === editingExpenseId.value);
+                        if (idx !== -1) expenses.value[idx] = newExp;
+                        addToast('Expense updated successfully!', 'success');
+                    } else {
+                        expenses.value.push(newExp);
+                        addToast('New bill added to group!', 'success');
+                    }
+
+                    showExpenseModal.value = false;
+                    renderChart();
+                };
+
+                const confirmDeleteExpense = (expId) => {
+                    confirmDialog.value = {
+                        show: true,
+                        title: 'Delete Expense?',
+                        message: 'Are you sure you want to delete this expense? This will recalculate all group balances.',
+                        onConfirm: () => {
+                            expenses.value = expenses.value.filter(e => e.id !== expId);
+                            addToast('Expense deleted', 'info');
+                            renderChart();
+                        }
+                    };
+                };
+
+                // Member Actions
+                const openAddMemberModal = () => {
+                    editingMemberId.value = null;
+                    memberForm.value = {
+                        name: '',
+                        email: '',
+                        color: avatarColors[members.value.length % avatarColors.length]
+                    };
+                    showMemberModal.value = true;
+                };
+
+                const openEditMemberModal = (member) => {
+                    editingMemberId.value = member.id;
+                    memberForm.value = {
+                        name: member.name,
+                        email: member.email || '',
+                        color: member.color || avatarColors[0]
+                    };
+                    showMemberModal.value = true;
+                };
+
+                const saveMember = () => {
+                    if (!memberForm.value.name.trim()) return;
+
+                    if (editingMemberId.value) {
+                        const idx = members.value.findIndex(m => m.id === editingMemberId.value);
+                        if (idx !== -1) {
+                            members.value[idx] = {
+                                ...members.value[idx],
+                                name: memberForm.value.name.trim(),
+                                email: memberForm.value.email.trim(),
+                                color: memberForm.value.color
+                            };
+                        }
+                        addToast('Member profile updated', 'success');
+                    } else {
+                        const newMem = {
+                            id: 'm_' + Date.now(),
+                            name: memberForm.value.name.trim(),
+                            email: memberForm.value.email.trim(),
+                            color: memberForm.value.color
+                        };
+                        members.value.push(newMem);
+                        addToast('Member added to group', 'success');
+                    }
+                    showMemberModal.value = false;
+                };
+
+                const confirmDeleteMember = (memberId) => {
+                    if (members.value.length <= 2) {
+                        addToast('Group must have at least 2 members');
+                        return;
+                    }
+                    confirmDialog.value = {
+                        show: true,
+                        title: 'Remove Member?',
+                        message: 'Removing a member will adjust remaining splits. Continue?',
+                        onConfirm: () => {
+                            members.value = members.value.filter(m => m.id !== memberId);
+                            // Cleanup splits for deleted member
+                            expenses.value.forEach(e => {
+                                if (e.splits && e.splits[memberId]) {
+                                    delete e.splits[memberId];
+                                }
+                            });
+                            addToast('Member removed', 'info');
+                        }
+                    };
+                };
+
+                // Settlement Payment Recording
+                const recordSettlementPayment = (fromId, toId, amount) => {
+                    const fromName = getMemberName(fromId);
+                    const toName = getMemberName(toId);
+
+                    expenses.value.push({
+                        id: 'settle_' + Date.now(),
+                        title: `Settlement: ${fromName} paid ${toName}`,
+                        amount: amount,
+                        category: 'Other',
+                        date: new Date().toISOString().substring(0, 10),
+                        paidBy: fromId,
+                        splitMethod: 'exact',
+                        splits: { [toId]: amount },
+                        expanded: false
+                    });
+
+                    confetti({
+                        particleCount: 80,
+                        spread: 60,
+                        origin: { y: 0.7 }
+                    });
+
+                    addToast(`Recorded ${currencySymbol.value}${formatMoney(amount)} payment from ${fromName} to ${toName}!`, 'success');
+                };
+
+                // Summary Generator for Messaging
+                const copySettlementSummary = () => {
+                    let text = `📊 *${groupName.value} - Settle Up Summary*\n`;
+                    text += `Currency: ${selectedCurrencyCode.value} (${currencySymbol.value})\n`;
+                    text += `Total Spent: ${currencySymbol.value}${formatMoney(totalGroupSpent.value)}\n\n`;
+
+                    if (optimizedSettlements.value.length === 0) {
+                        text += `✅ All debts are fully settled!`;
+                    } else {
+                        text += `*Pending Settlements:*\n`;
+                        optimizedSettlements.value.forEach((s, idx) => {
+                            text += `${idx + 1}. ${getMemberName(s.from)} ➡️ ${getMemberName(s.to)}: *${currencySymbol.value}${formatMoney(s.amount)}*\n`;
+                        });
+                    }
+
+                    document.execCommand('copy');
+                    navigator.clipboard?.writeText(text).catch(() => {});
+                    addToast('Settlement summary copied for messaging!', 'success');
+                };
+
+                // Export & Import
+                const exportJsonString = computed(() => {
+                    return JSON.stringify({
+                        groupName: groupName.value,
+                        currency: selectedCurrencyCode.value,
+                        members: members.value,
+                        expenses: expenses.value
+                    }, null, 2);
+                });
+
+                const openExportModal = () => {
+                    showExportModal.value = true;
+                };
+
+                const copyExportData = () => {
+                    navigator.clipboard?.writeText(exportJsonString.value);
+                    document.execCommand('copy');
+                    addToast('JSON backup copied to clipboard!', 'success');
+                };
+
+                const downloadExportFile = () => {
+                    const blob = new Blob([exportJsonString.value], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${groupName.value.replace(/\s+/g, '_')}_backup.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    addToast('Backup downloaded!', 'success');
+                };
+
+                const openImportModal = () => {
+                    importJsonInput.value = '';
+                    showImportModal.value = true;
+                };
+
+                const executeImport = () => {
+                    try {
+                        const parsed = JSON.parse(importJsonInput.value);
+                        if (!parsed.members || !parsed.expenses) {
+                            addToast('Invalid backup file format');
+                            return;
+                        }
+                        groupName.value = parsed.groupName || 'Imported Group';
+                        if (parsed.currency) selectedCurrencyCode.value = parsed.currency;
+                        members.value = parsed.members;
+                        expenses.value = parsed.expenses;
+                        showImportModal.value = false;
+                        addToast('Group data imported successfully!', 'success');
+                        renderChart();
+                    } catch (e) {
+                        addToast('Failed to parse JSON. Please check input.');
+                    }
+                };
+
+                const confirmResetData = () => {
+                    confirmDialog.value = {
+                        show: true,
+                        title: 'Reset to Sample Data?',
+                        message: 'This will erase current expenses and restore the original sample trip data.',
+                        onConfirm: () => {
+                            groupName.value = 'Weekend Lake Tahoe Trip';
+                            selectedCurrencyCode.value = 'USD';
+                            members.value = JSON.parse(JSON.stringify(initialMembers));
+                            expenses.value = JSON.parse(JSON.stringify(initialExpenses));
+                            addToast('Reset to sample trip data', 'info');
+                            renderChart();
+                        }
+                    };
+                };
+
+                const openEditGroupModal = () => {
+                    tempGroupName.value = groupName.value;
+                    showEditGroupModal.value = true;
+                };
+
+                const saveGroupName = () => {
+                    if (tempGroupName.value.trim()) {
+                        groupName.value = tempGroupName.value.trim();
+                        showEditGroupModal.value = false;
+                        addToast('Group title updated', 'success');
+                    }
+                };
+
+                // Helper Utilities
+                const getMemberName = (id) => {
+                    const m = members.value.find(mem => mem.id === id);
+                    return m ? m.name : 'Unknown';
+                };
+
+                const getCategoryIcon = (catName) => {
+                    const found = categories.find(c => c.name === catName);
+                    return found ? found.icon : 'fa-solid fa-coins';
+                };
+
+                const getInitials = (name) => {
+                    if (!name) return '?';
+                    return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                };
+
+                const formatDate = (dateStr) => {
+                    if (!dateStr) return '';
+                    const d = new Date(dateStr);
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                };
+
+                // Visual Chart.js Rendering
+                let chartInstance = null;
+
+                const renderChart = () => {
+                    nextTick(() => {
+                        const canvas = document.getElementById('categoryChart');
+                        if (!canvas) return;
+
+                        if (chartInstance) {
+                            chartInstance.destroy();
+                        }
+
+                        // Aggregate spending by category
+                        const catTotals = {};
+                        categories.forEach(c => catTotals[c.name] = 0);
+
+                        expenses.value.forEach(e => {
+                            const cat = e.category || 'Other';
+                            catTotals[cat] = (catTotals[cat] || 0) + (Number(e.amount) || 0);
+                        });
+
+                        const labels = Object.keys(catTotals).filter(cat => catTotals[cat] > 0);
+                        const data = labels.map(cat => catTotals[cat]);
+
+                        if (labels.length === 0) return;
+
+                        const colors = ['#6366f1', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899', '#06b6d4'];
+
+                        chartInstance = new Chart(canvas, {
+                            type: 'doughnut',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    data: data,
+                                    backgroundColor: colors.slice(0, labels.length),
+                                    borderWidth: 2,
+                                    borderColor: '#ffffff'
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                    legend: {
+                                        position: 'right',
+                                        labels: {
+                                            font: { size: 11, family: 'Inter, sans-serif' },
+                                            boxWidth: 12
+                                        }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                const val = context.raw || 0;
+                                                return ` ${currencySymbol.value}${formatMoney(val)}`;
+                                            }
+                                        }
+                                    }
+                                },
+                                cutout: '65%'
+                            }
+                        });
+                    });
+                };
+
+                // Watch current tab for chart rendering
+                watch(currentTab, (newTab) => {
+                    if (newTab === 'dashboard') {
+                        renderChart();
+                    }
+                });
+
+                onMounted(() => {
+                    loadStoredData();
+                    renderChart();
+                });
+
+                return {
+                    currencies,
+                    selectedCurrencyCode,
+                    currentCurrency,
+                    currencySymbol,
+                    currentCurrencyDecimals,
+                    groupName,
+                    members,
+                    expenses,
+                    currentTab,
+                    tabs,
+                    showDataMenu,
+                    categories,
+                    avatarColors,
+                    // Metrics
+                    totalGroupSpent,
+                    avgSpentPerPerson,
+                    memberBalances,
+                    optimizedSettlements,
+                    recentExpenses,
+                    filteredExpenses,
+                    // Search & Filters
+                    expenseSearch,
+                    filterCategory,
+                    filterPayer,
+                    // Modals
+                    showExpenseModal,
+                    editingExpenseId,
+                    showMemberModal,
+                    editingMemberId,
+                    showEditGroupModal,
+                    tempGroupName,
+                    showExportModal,
+                    showImportModal,
+                    importJsonInput,
+                    confirmDialog,
+                    toasts,
+                    // Forms & Validation
+                    memberForm,
+                    expenseForm,
+                    splitValidation,
+                    // Methods
+                    onCurrencyChange,
+                    setSplitMethod,
+                    recalculateSplits,
+                    openAddExpenseModal,
+                    openEditExpenseModal,
+                    saveExpense,
+                    confirmDeleteExpense,
+                    openAddMemberModal,
+                    openEditMemberModal,
+                    saveMember,
+                    confirmDeleteMember,
+                    recordSettlementPayment,
+                    copySettlementSummary,
+                    exportJsonString,
+                    openExportModal,
+                    copyExportData,
+                    downloadExportFile,
+                    openImportModal,
+                    executeImport,
+                    confirmResetData,
+                    openEditGroupModal,
+                    saveGroupName,
+                    getMemberName,
+                    getCategoryIcon,
+                    getInitials,
+                    formatMoney,
+                    formatDate
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
